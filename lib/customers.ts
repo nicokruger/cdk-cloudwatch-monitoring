@@ -27,7 +27,8 @@ const customers: Customer[] = [
     database: "postgres",
     version: Version.v2,
     demoParams: {
-      threshold: 5
+      threshold: 5,
+      enableAnomalyDetection: true
     },
   },
   {

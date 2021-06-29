@@ -8,16 +8,21 @@ export interface CreateAlarms {
 export interface DemoProps {
   enabled: boolean;
   threshold: number;
+  enableAnomalyDetection: boolean;
+  anomalyDetectionBand: number;
 }
 
 export type DemoParameters = Require<DemoProps, 'threshold' >
 const defaultAlarmsProps: DemoProps = {
   enabled: true,
   threshold: 4,
+  enableAnomalyDetection: false,
+  anomalyDetectionBand: 0.5
 }
 
 export class DemoAlarms implements CreateAlarms {
 
+  anomaly_detector: cloudwatch.CfnAnomalyDetector;
   props: DemoProps;
 
   public constructor(props: DemoParameters) {
@@ -25,6 +30,7 @@ export class DemoAlarms implements CreateAlarms {
   }
 
   public createAlarms(scope: cdk.Stack, namespace: string, customer: string): KpiChecks {
+    // Create two metrics
     const demoMetric = new cloudwatch.Metric({
       namespace,
       metricName: 'test_metric',
@@ -32,6 +38,15 @@ export class DemoAlarms implements CreateAlarms {
         [customer]: 'demo'
       }
     });
+    const demoMetric2 = new cloudwatch.Metric({
+      namespace,
+      metricName: 'test_metric2',
+      dimensions: {
+        [customer]: 'demo'
+      }
+    });
+
+    // First Alarm
     const demoAlarmName = `${customer}: Demo Alarm`;
     const demoAlarm = new cloudwatch.Alarm(scope, [customer, 'Demo Alarm'].join('-'), {
       alarmName: makeInnerAlarmName(demoAlarmName),
@@ -43,13 +58,7 @@ export class DemoAlarms implements CreateAlarms {
       treatMissingData: cloudwatch.TreatMissingData.BREACHING
     });
 
-    const demoMetric2 = new cloudwatch.Metric({
-      namespace,
-      metricName: 'test_metric2',
-      dimensions: {
-        [customer]: 'demo'
-      }
-    });
+    // Second Alarm
     const demoAlarmName2 = `${customer}: Demo Alarm2`;
     const demoAlarm2 = new cloudwatch.Alarm(scope, [customer, 'Demo Alarm2'].join('-'), {
       alarmName: makeInnerAlarmName(demoAlarmName2),
@@ -61,7 +70,7 @@ export class DemoAlarms implements CreateAlarms {
       treatMissingData: cloudwatch.TreatMissingData.BREACHING
     });
 
-    const defaultAlarms: AlarmSpec[] = [
+    const alarms: AlarmSpec[] = [
       {
         alarm:demoAlarm,
         name:demoAlarmName,
@@ -75,8 +84,13 @@ export class DemoAlarms implements CreateAlarms {
     ]
 
 
+    if (this.props.enableAnomalyDetection) {
+      this.createAnomalyDetectionAlarm(demoMetric, scope, namespace, customer, alarms);
+    }
+
+
     return {
-      alarms: defaultAlarms,
+      alarms: alarms,
       kpis: [
         {
           kpi: Kpi.DEMO,
@@ -92,6 +106,84 @@ export class DemoAlarms implements CreateAlarms {
         }
       ]
     }
+
+  }
+
+  createAnomalyDetectionAlarm(metric: cloudwatch.Metric, scope: cdk.Stack, namespace: string, customer: string, alarms: AlarmSpec[]) {
+    // if first time, create anomaly detection model
+    if (this.anomaly_detector == undefined) {
+      this.anomaly_detector = new cloudwatch.CfnAnomalyDetector(
+        scope, ["Purchase24HourAnomalyDetector"].join("-"),{
+          metricName:"test_metric",
+          namespace:namespace,
+          stat:"Average",
+          dimensions: [{
+            name: customer,
+            value: 'demo'
+          }]
+        })
+    } else {
+      // use existing anomaly detection model
+      const dims = (this.anomaly_detector?.dimensions) as cloudwatch.CfnAnomalyDetector.DimensionProperty[];
+      dims.push({
+        name: customer,
+        value: 'demo'
+      });
+      console.log('adding dimension', dims.length);
+    }
+
+    const anomalyAlarmName = `Anomaly Detection Demo`;
+    const anomalyAlarm = new cloudwatch.Alarm(scope, [customer, 'Anomaly Detection Alarm'].join('-'), {
+      alarmName: makeInnerAlarmName(anomalyAlarmName),
+      alarmDescription: 'Anomalous value detected',
+      metric,
+      threshold: this.props.anomalyDetectionBand,
+      evaluationPeriods: 3,
+      datapointsToAlarm: 3,
+      treatMissingData: cloudwatch.TreatMissingData.IGNORE,
+      comparisonOperator: cloudwatch.ComparisonOperator.LESS_THAN_LOWER_THRESHOLD,
+    });
+    const cfnAnomalyAlarm = anomalyAlarm.node.defaultChild as cloudwatch.CfnAlarm;
+
+    const adId = 'ad_' + customer.toLowerCase().replace(/ /g, '_');
+    const mId = 'm_' + customer.toLowerCase().replace(/ /g, '_');
+
+    cfnAnomalyAlarm.metrics = [
+      {
+        expression: `ANOMALY_DETECTION_BAND(${mId}, ${this.props.anomalyDetectionBand})`,
+        id: adId
+      },
+      {
+        id:mId,
+        metricStat: {
+          metric: {
+            metricName: this.anomaly_detector.metricName,
+            namespace: this.anomaly_detector.namespace,
+            dimensions: [{
+              name: customer,
+              value: 'demo'
+            }]
+          },
+          period: cdk.Duration.minutes(15).toSeconds(),
+          //period: cdk.Duration.minutes(5).toSeconds(),
+          stat: "Average"
+        }
+      }
+
+    ]
+    cfnAnomalyAlarm.thresholdMetricId = adId;
+    cfnAnomalyAlarm.metricName = undefined;
+    cfnAnomalyAlarm.statistic = undefined;
+    cfnAnomalyAlarm.namespace = undefined;
+    cfnAnomalyAlarm.period = undefined;
+    cfnAnomalyAlarm.dimensions = undefined;
+    cfnAnomalyAlarm.threshold = undefined;
+
+    alarms.push({
+      alarm:anomalyAlarm,
+      name:anomalyAlarmName,
+      disableDuringQuietTime: true
+    })
 
   }
 }

@@ -5,6 +5,7 @@ Sample code to get started with Step Functions and CloudWatch monitoring for you
   - Step Function state machines to retrieve data from a database and load into CloudWatch
   - A single metric per customer
   - An alarm per metric per customer
+  - An example CloudWatch Anomaly Detection model setup + alarm
   - A CloudWatch overview dashboard
   - A CloudWatch dashboard per customer
   - The ability to optionally set "quiet times", during which the alarms will be silenced.
@@ -28,7 +29,8 @@ To read more about it, check out [this article](https://www.inmytree.co.za/blog/
       database: "postgres",
       version: Version.v2,
       demoParams: {
-        threshold: 5
+        threshold: 5,
+        enableAnomalyDetection: true
       },
     },
     {
