@@ -352,39 +352,6 @@ export class OpsviewSqlStack extends cdk.Stack {
 
     const statusAlarms = this.createCustomerStatusAlarms(alarmsByCustomer, dataAlarmsByCustomer);
 
-    const dashboard = new cloudwatch.Dashboard(this, 'Cloudwatch-Default', {
-      dashboardName: 'CloudWatch-Default'
-    });
-
-    dashboard.addWidgets(
-      new cloudwatch.AlarmStatusWidget({
-        title: 'Data Loading Status',
-        alarms: Object.values(dataAlarmsByCustomer),
-        width,
-        height: 4
-      })
-    );
-
-    dashboard.addWidgets(
-      new cloudwatch.AlarmStatusWidget({
-        title: 'Customer Status',
-        width,
-        alarms: statusAlarms,
-        height:4
-      })
-    )
-
-    for (const customer of Object.keys(alarmsByCustomer)) {
-      dashboard.addWidgets(
-        new cloudwatch.AlarmStatusWidget({
-          title: 'Status: ' + customer,
-          alarms: alarmsByCustomer[customer],
-          width,
-          height: 3
-        }),
-      );
-    }
-
     const dataLoadMetrics: (cloudwatch.Metric|cloudwatch.MathExpression)[] = Object.keys(dataAlarmsByCustomer).map( (customer) => {
       const alarm = dataAlarmsByCustomer[customer];
       return (alarm.metric as cloudwatch.Metric).with({
@@ -392,19 +359,6 @@ export class OpsviewSqlStack extends cdk.Stack {
         label: customer
       });;
     });
-    const graphWidget = new cloudwatch.GraphWidget({
-      title: 'Data Load Failures',
-      left: dataLoadMetrics,
-      leftYAxis: {
-        min: 0
-      },
-      width,
-      height:5
-    });
-    dashboard.addWidgets(graphWidget);
-
-
-
 
     const overviewDashboard = new cloudwatch.Dashboard(this, 'Overview', {
       dashboardName: 'Overview'
@@ -613,47 +567,14 @@ export class OpsviewSqlStack extends cdk.Stack {
 
   makeStepFunctionAlarms(opname: string, stateMachine: sfn.StateMachine) {
 
-    let failedMetric;
-    let period;
-    let evaluationPeriods;
-    let datapointsToAlarm;
-    let threshold = 1;
+    const failedMetric = stateMachine.metricFailed().with({
+      statistic: 'maximum'
+    });
+    const period = cdk.Duration.minutes(5);
+    const evaluationPeriods = 4;
+    const datapointsToAlarm = 3;
+    const threshold = 1;
 
-    /*
-    if (longStateMachine !== undefined) {
-      const shortFailedMetric = shortStateMachine.metricFailed().with({
-        statistic: 'sum'
-      });
-      const longFailedMetric = longStateMachine.metricFailed().with({
-        statistic: 'sum'
-      });
-      const cleanname = opname.replace(/[ -]/g, '_');
-      const shortKey = `short_${cleanname}`;
-      const longKey = `long_${cleanname}`;
-      failedMetric = new cloudwatch.MathExpression({
-        expression: `${shortKey} + ${longKey}*2`,
-        period: cdk.Duration.minutes(20),
-        usingMetrics: {
-          [shortKey]: shortFailedMetric,
-          [longKey]: longFailedMetric
-        }
-      });
-      evaluationPeriods = 1;
-      datapointsToAlarm = 1;
-      threshold = 4;
-    } else {
-    */
-
-      failedMetric = stateMachine.metricFailed().with({
-        statistic: 'maximum'
-      });
-      period = cdk.Duration.minutes(5);
-      evaluationPeriods = 4;
-      datapointsToAlarm = 3;
-
-    /*
-    }
-    */
     const statemachineFailedAlarm = new cloudwatch.Alarm(this, `${opname} Data Failed`, {
       alarmName: `${opname} Data Loading Status`,
       alarmDescription: 'The data loading is failing for customer ' + opname,
@@ -665,8 +586,8 @@ export class OpsviewSqlStack extends cdk.Stack {
       comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
       treatMissingData: cloudwatch.TreatMissingData.BREACHING
     });
-    return statemachineFailedAlarm;
 
+    return statemachineFailedAlarm;
   }
 
 
@@ -724,7 +645,7 @@ export class OpsviewSqlStack extends cdk.Stack {
     this.addedLongTargets++;
     return this.fetchLongSchedule;
   }
-  
+
 }
 
 // Used for the queries
