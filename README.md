@@ -9,7 +9,7 @@ Sample code to get started with Step Functions and CloudWatch monitoring for you
   - A CloudWatch dashboard per customer
   - The ability to optionally set "quiet times", during which the alarms will be silenced.
 
-To read more about it, check out [this article](https:/inmytree.co.za/bla)
+To read more about it, check out [this article](https://www.inmytree.co.za/blog/monitor-existing-deployments-cloudwatch-step-functions-cdk/)
 
 ## Setup
 
