@@ -14,7 +14,7 @@ To read more about it, check out [this article](https://www.inmytree.co.za/blog/
 
 ## Setup
 
- - Install CDK
+ - Install and setup [AWS CDK](https://docs.aws.amazon.com/cdk/latest/guide/getting_started.html)
 
  - Create a dev RDS (postgres) in your account, or if you have one already, note the hostname
 
